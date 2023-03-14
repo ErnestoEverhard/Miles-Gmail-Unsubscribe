@@ -28,9 +28,14 @@ function unsubscribeFromEmails() {
         break;
       }
       // If no unsubscribe link is found, try to find a "List-Unsubscribe" header in the raw email content
+      // check to see if else
       else {
         var rawContent = messages[j].getRawContent();
         Logger.log("Entered Else");
+        if(rawContent){
+          Logger.log("Rawcontent is null");
+          break;
+        }
         var url = RawListUnsubscribe(rawContent);
         
         // If a "List-Unsubscribe" header is found, try to unsubscribe using the URL specified in the header
@@ -90,5 +95,7 @@ function followUnsubscribeLink(link) {
   var options = {
     followRedirects: false
   };
-  UrlFetchApp.fetch(link, options);
+  if (link && (link.startsWith("http://") || link.startsWith("https://"))) {
+    UrlFetchApp.fetch(link, options);
+  }
 }
