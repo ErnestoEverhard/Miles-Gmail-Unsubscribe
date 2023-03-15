@@ -14,15 +14,16 @@ function unsubscribeFromEmails() {
       
       // Try to find an unsubscribe link in the message body
       var unsubscribeLink = getEmailUnsubscribeLink(body);
-      Logger.log('Unsubscribe link: ' + unsubscribeLink);
       
       // If an unsubscribe link is found, try to unsubscribe from it
       if (unsubscribeLink) {
+        Logger.log('Unsubscribe link: ' + unsubscribeLink);
         var success = followUnsubscribeLink(unsubscribeLink, messages[j]);
         if (success) {
           threads[i].removeLabel(GmailApp.getUserLabelByName('unsubscribe'));
           messages[j].markRead();
         } else {
+          Logger.log("followUnsubscribeLink returned false. Moving to spam " + messages[j].getFrom());
           threads[i].moveToSpam();
         }
         break;
@@ -33,7 +34,8 @@ function unsubscribeFromEmails() {
         var rawContent = messages[j].getRawContent();
         
         if(rawContent){
-          Logger.log("Rawcontent is null");
+          Logger.log("Rawcontent is null, Moving to spam " + messages[j].getFrom());
+          threads[i].moveToSpam();
           threads[i].removeLabel(GmailApp.getUserLabelByName('unsubscribe'));
           messages[j].markRead();
           break;
@@ -96,7 +98,7 @@ function getEmailUnsubscribeLink(body) {
  */
 function followUnsubscribeLink(link, message) {
   var options = {
-    followRedirects: true,
+    followRedirects: false,
     muteHttpExceptions: true
   };
   if (link && (link.startsWith("http://") || link.startsWith("https://"))) {
