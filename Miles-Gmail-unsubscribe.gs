@@ -11,29 +11,31 @@ function unsubscribeFromEmails() {
     for (var j = 0; j < messages.length; j++) {
       // Get the message body
       var body = messages[j].getBody();
-      Logger.log('Body:');
-      //Logger.log(body);
       
       // Try to find an unsubscribe link in the message body
       var unsubscribeLink = getEmailUnsubscribeLink(body);
-      Logger.log('Unsubscribe link:');
-      Logger.log(unsubscribeLink);
+      Logger.log('Unsubscribe link: ' + unsubscribeLink);
       
       // If an unsubscribe link is found, try to unsubscribe from it
       if (unsubscribeLink) {
-        Logger.log('Attempting to unsub from' + unsubscribeLink);
-        followUnsubscribeLink(unsubscribeLink);
-        threads[i].removeLabel(GmailApp.getUserLabelByName('unsubscribe'));
-        messages[j].markRead();
+        var success = followUnsubscribeLink(unsubscribeLink, messages[j]);
+        if (success) {
+          threads[i].removeLabel(GmailApp.getUserLabelByName('unsubscribe'));
+          messages[j].markRead();
+        } else {
+          threads[i].moveToSpam();
+        }
         break;
       }
       // If no unsubscribe link is found, try to find a "List-Unsubscribe" header in the raw email content
       // check to see if else
       else {
         var rawContent = messages[j].getRawContent();
-        Logger.log("Entered Else");
+        
         if(rawContent){
           Logger.log("Rawcontent is null");
+          threads[i].removeLabel(GmailApp.getUserLabelByName('unsubscribe'));
+          messages[j].markRead();
           break;
         }
         var url = RawListUnsubscribe(rawContent);
@@ -45,6 +47,7 @@ function unsubscribeFromEmails() {
           Logger.log("Unsubscribe " + status + " " + url);
           threads[i].removeLabel(GmailApp.getUserLabelByName('unsubscribe'));
           messages[j].markRead();
+          break;
         }
       }
     }
@@ -91,11 +94,86 @@ function getEmailUnsubscribeLink(body) {
 /**
  * Follows an unsubscribe link
  */
-function followUnsubscribeLink(link) {
+function followUnsubscribeLink(link, message) {
   var options = {
-    followRedirects: false
+    followRedirects: true,
+    muteHttpExceptions: true
   };
   if (link && (link.startsWith("http://") || link.startsWith("https://"))) {
-    UrlFetchApp.fetch(link, options);
+    var response = UrlFetchApp.fetch(link, options);
+    var content = response.getContentText();
+    return checkUnsubscribeSuccess(content, message);
   }
+  return false;
+}
+
+
+// This function checks if the unsubscribe process was successful by looking for
+// success phrases in the content of the webpage resulting from following the unsubscribe link
+function checkUnsubscribeSuccess(content) {
+  // List of common success phrases used by websites to confirm a successful unsubscribe
+ var successPhrases = [
+    "you have been unsubscribed",
+    "unsubscription confirmed",
+    "successfully unsubscribed",
+    "your email has been removed",
+    "you've been removed from our list",
+    "opt-out successful",
+    "you will no longer receive emails from us",
+    "we're sorry to see you go",
+    "your subscription has been canceled",
+    "your request has been processed",
+  ];
+
+  // Initialize a variable to store the result of the unsubscribe process
+  var success = false;
+
+  // Attempt to parse the HTML content using XmlService
+  var htmlDocument;
+  try {
+    htmlDocument = XmlService.parse(content);
+  } catch (error) {
+    // If parsing fails, return false (unsuccessful unsubscribe)
+    return success;
+  }
+
+  // Get the root node of the parsed HTML document
+  var rootNode = htmlDocument.getRootElement();
+
+  // Get all text nodes from the HTML document
+  var allTextNodes = getTextNodes(rootNode, []);
+
+  // Loop through all text nodes
+  allTextNodes.forEach(function (textNode) {
+    // Get the text content of the node and convert it to lowercase
+    var textContent = textNode.getText().toLowerCase();
+
+    // Loop through the success phrases
+    successPhrases.forEach(function (phrase) {
+      // If the text content includes a success phrase, set success to true
+      if (textContent.includes(phrase)) {
+        success = true;
+      }
+    });
+  });
+
+  // Return the result of the unsubscribe process (true if successful, false if not)
+  return success;
+}
+
+// This function recursively retrieves all text nodes from a given node and its children
+function getTextNodes(node, textNodes) {
+  // If the node is a text node, add it to the textNodes array
+  if (node.getType() === XmlService.ContentTypes.TEXT) {
+    textNodes.push(node);
+  }
+  // If the node is an element node, process its children
+  else if (node.getType() === XmlService.ContentTypes.ELEMENT) {
+    var children = node.getChildren();
+    for (var i = 0; i < children.length; i++) {
+      getTextNodes(children[i], textNodes);
+    }
+  }
+  // Return the updated textNodes array
+  return textNodes;
 }
